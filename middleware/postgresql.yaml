@@ -1,0 +1,120 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgresql
+  labels:
+    app: postgresql
+  annotations:
+    kubesphere.io/creator: admin
+    kubesphere.io/description: PostgreSQL 数据库
+spec:
+  ports:
+    - name: postgresql
+      port: 5432
+  clusterIP: None
+  selector:
+    app: postgresql
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgresql
+  annotations:
+    kubesphere.io/description: PostgreSQL 数据库
+data:
+  POSTGRES_PASSWORD: Z2VvdmlzQDEyMw==
+type: Opaque
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgresql
+  annotations:
+    kubesphere.io/creator: admin
+    kubesphere.io/description: PostgreSQL 数据库
+data:
+  PGDATA: /var/lib/postgresql/data/pgdata
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgresql
+  labels:
+    app: postgresql
+  annotations:
+    kubesphere.io/creator: admin
+    kubesphere.io/description: PostgreSQL 数据库
+spec:
+  serviceName: postgresql
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgresql
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: postgresql
+    spec:
+      containers:
+        - name: postgresql
+          image: /postgresql:14-alpine
+          command:
+            - /docker-entrypoint.sh
+            - '-c'
+            - max_connections=2000
+            - '-c'
+            - listen_addresses=*
+          ports:
+            - name: postgresql
+              protocol: TCP
+              containerPort: 5432
+          readinessProbe:
+            initialDelaySeconds: 10
+            timeoutSeconds: 3
+            periodSeconds: 10
+            successThreshold: 1
+            failureThreshold: 10
+            tcpSocket:
+              port: 5432
+          livenessProbe:
+            initialDelaySeconds: 5
+            timeoutSeconds: 10
+            periodSeconds: 30
+            successThreshold: 1
+            failureThreshold: 3
+            tcpSocket:
+              port: 5432
+          env:
+            - name: PGDATA
+              valueFrom:
+                configMapKeyRef:
+                  name: postgresql
+                  key: PGDATA
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgresql
+                  key: POSTGRES_PASSWORD
+          volumeMounts:
+            - name: postgresql
+              mountPath: /var/lib/postgresql/data
+            - name: minio
+              mountPath: /mnt
+      volumes:
+        - name: minio
+          persistentVolumeClaim:
+            claimName: minio-minio-0
+  volumeClaimTemplates:
+    - kind: PersistentVolumeClaim
+      apiVersion: v1
+      metadata:
+        name: postgresql
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 200Gi
+        volumeMode: Filesystem

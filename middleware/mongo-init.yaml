@@ -1,0 +1,72 @@
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: mongo
+  annotations:
+    kubesphere.io/creator: admin
+    kubesphere.io/description: mongo 初始化脚本
+data:
+  mongo-init.sh: |
+    #/bin/bash
+
+    mongo --host mongo-0.mongo --port 27017 --quiet <<EOF
+    use admin
+    db.createUser(
+      {
+        user:"root",
+        pwd:"123456",
+        roles:[
+          {
+            role:"root",
+            db:"admin"
+          }
+        ]
+      }
+    )
+    EOF
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  labels:
+    app: mongo-init
+  name: mongo-init
+  annotations:
+    kubesphere.io/creator: admin
+    kubesphere.io/description: 初始化 mongo 认证用户
+spec:
+  parallelism: 1
+  completions: 1
+  backoffLimit: 10
+  template:
+    metadata:
+      labels:
+        app: mongo-init
+    spec:
+      initContainers:
+        - name: wait-run
+          image: /busybox:1.35.0
+          command: ['/bin/sh', '-c']
+          args:
+            - until nc -w 1 -z mongo 27017;
+              do echo "Waiting for mongo initialization complete..."; sleep 10; done;
+              echo "mongo has initialized...";
+      containers:
+        - name: mongo-init
+          image: /mongo:4.4.13
+          volumeMounts:
+            - name: init
+              mountPath: /mongo-init.sh
+              subPath: mongo-init.sh
+          command: ['/bin/bash', '-c']
+          args:
+            - /mongo-init.sh
+      restartPolicy: Never
+      volumes:
+        - name: init
+          configMap:
+            name: mongo
+            items:
+              - key: mongo-init.sh
+                path: mongo-init.sh
+            defaultMode: 0755

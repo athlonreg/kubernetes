@@ -1,0 +1,96 @@
+kind: Job
+apiVersion: batch/v1
+metadata:
+  name: frontend
+  namespace: public
+  labels:
+    app: frontend
+  annotations:
+    kubesphere.io/alias-name: 前端
+    kubesphere.io/creator: admin
+    kubesphere.io/description: 前端发版任务
+spec:
+  parallelism: 1
+  completions: 1
+  activeDeadlineSeconds: 1800
+  backoffLimit: 6
+  template:
+    metadata:
+      labels:
+        app: frontend
+        job-name: frontend
+      annotations:
+        kubesphere.io/creator: admin
+    spec:
+      volumes:
+        - name: certs
+          hostPath:
+            path: /etc/docker/certs.d
+            type: ''
+        - name: git-credentials
+          configMap:
+            name: frontend
+            items:
+              - key: .git-credentials
+                path: .git-credentials
+            defaultMode: 420
+        - name: gitconfig
+          configMap:
+            name: frontend
+            items:
+              - key: .gitconfig
+                path: .gitconfig
+            defaultMode: 420
+        - name: git
+          hostPath:
+            path: /media/store/frontend/wisdom-center-manage-web
+            type: ''
+      containers:
+        - name: docker
+          image: '/docker:20.10.21-git'
+          command:
+            - /bin/sh
+          args:
+            - /root/wisdom-center-manage-web/build.sh
+          env:
+            - name: DOCKER_TLS_CERTDIR
+              value: /certs
+            - name: DOCKER_HOST
+              value: tcp://192.168.131.40:2375
+          resources:
+            limits:
+              cpu: '2'
+              memory: 8Gi
+            requests:
+              cpu: 10m
+              memory: 10Mi
+          volumeMounts:
+            - name: certs
+              mountPath: /certs
+            - name: git-credentials
+              readOnly: true
+              mountPath: /root/.git-credentials
+              subPath: .git-credentials
+            - name: gitconfig
+              readOnly: true
+              mountPath: /root/.gitconfig
+              subPath: .gitconfig
+            - name: git
+              mountPath: /root/wisdom-center-manage-web
+          lifecycle:
+            preStop:
+              exec:
+                command:
+                  - docker image prune -f
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            privileged: true
+      restartPolicy: OnFailure
+      terminationGracePeriodSeconds: 30
+      dnsPolicy: ClusterFirst
+      securityContext: {}
+      schedulerName: default-scheduler
+  completionMode: NonIndexed
+  suspend: false

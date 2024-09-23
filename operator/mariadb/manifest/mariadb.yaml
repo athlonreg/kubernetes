@@ -1,0 +1,82 @@
+apiVersion: mariadb.mmontes.io/v1alpha1
+kind: MariaDB
+metadata:
+  name: mariadb
+spec:
+  rootPasswordSecretKeyRef:
+    name: mariadb
+    key: root-password
+  database: mariadb
+  username: mariadb
+  passwordSecretKeyRef:
+    name: mariadb
+    key: password
+  image:
+    repository: /mariadb
+    tag: "10.11.3"
+    pullPolicy: IfNotPresent
+  port: 3306
+  volumeClaimTemplate:
+    resources:
+      requests:
+        storage: 100Gi
+    accessModes:
+      - ReadWriteOnce
+    storageClassName: nfs
+  myCnfConfigMapKeyRef:
+    name: mariadb-my-cnf
+    key: config
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+  env:
+    - name: TZ
+      value: Asia/Shanghai
+  envFrom:
+    - configMapRef:
+        name: mariadb
+  podSecurityContext:
+    runAsUser: 0
+  securityContext:
+    allowPrivilegeEscalation: false
+  livenessProbe:
+    exec:
+      command:
+        - bash
+        - -c
+        - mysql -u root -p${MARIADB_ROOT_PASSWORD} -e "SELECT 1;"
+    initialDelaySeconds: 20
+    periodSeconds: 10
+    timeoutSeconds: 5
+  readinessProbe:
+    exec:
+      command:
+        - bash
+        - -c
+        - mysql -u root -p${MARIADB_ROOT_PASSWORD} -e "SELECT 1;"
+    initialDelaySeconds: 20
+    periodSeconds: 10
+    timeoutSeconds: 5
+  metrics:
+    exporter:
+      image:
+        repository: /mysqld-exporter
+        tag: "v0.14.0"
+        pullPolicy: IfNotPresent
+      resources:
+        requests:
+          cpu: 50m
+          memory: 64Mi
+        limits:
+          cpu: 300m
+          memory: 512Mi
+    serviceMonitor:
+      prometheusRelease: prometheus
+      interval: 10s
+      scrapeTimeout: 10s
+  service:
+    type: NodePort

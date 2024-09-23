@@ -1,0 +1,182 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name: clickhouse
+  labels:
+    app: clickhouse
+    clickhouse.altinity.com/Service: chi
+    clickhouse.altinity.com/app: chop
+    clickhouse.altinity.com/chi: clickhouse
+spec:
+  ports:
+    - name: http
+      protocol: TCP
+      port: 8123
+      targetPort: 8123
+      nodePort: 38123
+    - name: tcp
+      protocol: TCP
+      port: 9000
+      targetPort: 9000
+      nodePort: 49000
+    - name: mysql
+      protocol: TCP
+      port: 9004
+      targetPort: 9004
+      nodePort: 39004
+    - name: interserver
+      protocol: TCP
+      port: 9009
+      targetPort: 9009
+      nodePort: 39009
+  selector:
+    clickhouse.altinity.com/app: chop
+    clickhouse.altinity.com/chi: clickhouse
+    clickhouse.altinity.com/ready: 'yes'
+  type: NodePort
+---
+apiVersion: clickhouse.altinity.com/v1
+kind: ClickHouseInstallation
+metadata:
+  name: clickhouse
+spec:
+  defaults:
+    templates:
+      podTemplate: clickhouse-v22.8
+      dataVolumeClaimTemplate: data-volume-claim
+      logVolumeClaimTemplate: log-volume-claim
+      serviceTemplate: chi-service-template
+      clusterServiceTemplate: cluster-service-template
+      shardServiceTemplate: shard-service-template
+      replicaServiceTemplate: replica-service-template
+  configuration:
+    clusters:
+      - name: cluster
+        templates:
+          podTemplate: clickhouse-v22.8
+          dataVolumeClaimTemplate: data-volume-claim
+          logVolumeClaimTemplate: log-volume-claim
+          serviceTemplate: chi-service-template
+        layout:
+          shardsCount: 1
+          replicasCount: 1
+    settings:
+      compression/case/method: zstd
+      http_port: 8123
+      interserver_http_port: 9009
+      mysql_port: 9004
+      tcp_port: 9000
+      storage_configuration/disks/disk2/path: /var/lib/clickhouse-colddata/
+      # storage_configuration/policies/default/volumes/default/disk: default
+      storage_configuration/policies/default/volumes/hot/disk: default
+      storage_configuration/policies/default/volumes/hot/max_data_part_size_bytes: 429496729600
+      storage_configuration/policies/default/volumes/cold/disk: disk2
+      # storage_configuration/policies/default/volumes/disk2/disk: disk2
+    users:
+      admin/networks/ip: 0.0.0.0/0
+      admin/password_sha256_hex: cd3ba4f11ec257dc8ef007010c003d715ddfaf2befffe70fc4f23323982a5b31
+      admin/profile: default
+      default/networks/host_regexp:
+        - ^chi-clickhouse-cluster-\d-\d.*$
+        - ^chi-clickhouse-cluster-\d-\d-\d\..*$
+      default/networks/ip:
+        - "::1"
+        - "127.0.0.1"
+      default/profile: default
+      default/quota: default
+      readonly/password: 123456
+      readonly/profile: readonly
+      readonly/quota: default
+  templates:
+    podTemplates:
+      - name: clickhouse-v22.8
+        podDistribution:
+          - type: ShardAntiAffinity
+          - type: MaxNumberPerNode
+            number: 2
+            topologyKey: "kubernetes.io/hostname"
+        spec:
+          containers:
+            - name: clickhouse
+              image: /clickhouse-server:22.8-alpine
+              ports:
+                - name: http
+                  containerPort: 8123
+                - name: tcp
+                  containerPort: 9000
+                - name: mysql
+                  containerPort: 9004
+                - name: interserver
+                  containerPort: 9009
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 64Mi
+                limits:
+                  cpu: 4000m
+                  memory: 16Gi
+              volumeMounts:
+                - name: data-volume-claim
+                  mountPath: /var/lib/clickhouse
+                - name: data-volume-claim-colddata
+                  mountPath: /var/lib/clickhouse-colddata
+            - name: clickhouse-log
+              image: /clickhouse-server:22.8-alpine
+              command:
+                - "/bin/sh"
+                - "-c"
+                - "--"
+              args:
+                - "while true; do sleep 30; done;"
+          securityContext:
+            runAsUser: 101
+            runAsGroup: 101
+            fsGroup: 101
+    serviceTemplates:
+      - name: chi-service-template
+        generateName: "service-{chi}"
+        metadata:
+          labels:
+            app: clickhouse
+        spec:
+          ports:
+            - name: http
+              nodePort: 38123
+              port: 8123
+            - name: tcp
+              nodePort: 49000
+              port: 9000
+            - name: mysql
+              nodePort: 39004
+              port: 9004
+            - name: interserver
+              nodePort: 39009
+              port: 9009
+          type: NodePort
+    volumeClaimTemplates:
+      - name: data-volume-claim
+        provisioner: StatefulSet
+        reclaimPolicy: Retain
+        spec:
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 100Gi
+      - name: data-volume-claim-colddata
+        provisioner: StatefulSet
+        reclaimPolicy: Retain
+        spec:
+          accessModes:
+            - ReadWriteOnce
+#          storageClassName: nfs
+          resources:
+            requests:
+              storage: 100Gi
+      - name: log-volume-claim
+        spec:
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 2Gi

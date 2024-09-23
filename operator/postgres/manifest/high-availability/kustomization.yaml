@@ -1,0 +1,4 @@
+namespace: ismart
+
+resources:
+- ha-postgres.yaml

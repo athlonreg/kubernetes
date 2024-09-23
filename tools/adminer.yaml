@@ -1,0 +1,95 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name: adminer
+  labels:
+    app: adminer
+spec:
+  ports:
+    - name: adminer
+      protocol: TCP
+      port: 8080
+      targetPort: 8080
+      nodePort: 30002
+  selector:
+    app: adminer
+  type: NodePort
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  labels:
+    app: adminer
+  name: adminer
+data:
+  ADMINER_PLUGINS: "dump-alter dump-bz2 dump-date dump-json dump-php dump-xml dump-zip edit-calendar edit-foreign edit-textarea email-table enum-option enum-types file-upload foreign-system frames json-column slugify sql-log struct-comments table-indexes-structure table-structure tables-filter tinymce translation version-noverify wymeditor"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  labels:
+    app: adminer
+  name: adminer-plugins-enable
+data:
+  database-hide.php: |
+    <?php
+    require_once('plugins/database-hide.php');
+    
+    /**
+      * @param array case insensitive database names in values
+      */
+    return new AdminerDatabaseHide(
+      $disabled = ???
+    );
+---
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: adminer
+  labels:
+    app: adminer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: adminer
+  template:
+    metadata:
+      labels:
+        app: adminer
+    spec:
+      containers:
+        - name: adminer
+          image: '/adminer:standalone'
+          ports:
+            - name: adminer
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: ADMINER_PLUGINS
+              valueFrom:
+                configMapKeyRef:
+                  key: ADMINER_PLUGINS
+                  name: adminer
+            - name: ADMINER_DESIGN
+              value: dracula
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8080
+              scheme: HTTP
+            initialDelaySeconds: 5
+            timeoutSeconds: 10
+            periodSeconds: 10
+            successThreshold: 1
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8080
+              scheme: HTTP
+            initialDelaySeconds: 5
+            timeoutSeconds: 10
+            periodSeconds: 10
+            successThreshold: 1
+            failureThreshold: 3

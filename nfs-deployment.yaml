@@ -1,0 +1,41 @@
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: nfs-nfs-client-provisioner
+  namespace: kube-system
+  labels:
+    app: nfs-client-provisioner
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: nfs-client-provisioner
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: nfs-client-provisioner
+    spec:
+      serviceAccount: nfs-nfs-client-provisioner
+      serviceAccountName: nfs-nfs-client-provisioner
+      containers:
+        - name: nfs-client-provisioner
+          image: nfs-subdir-external-provisioner:v4.0.2
+          volumeMounts:
+            - name: nfs-client-root
+              mountPath: /persistentvolumes
+          env:
+            - name: PROVISIONER_NAME
+              value: cluster.local/nfs-nfs-client-provisioner
+            - name: NFS_SERVER
+#              replace nfs server address here
+              value: www.nfs.com
+            - name: NFS_PATH
+              value: /data
+      volumes:
+        - name: nfs-client-root
+          nfs:
+#            replace nfs server address here
+            server: www.nfs.com
+            path: /data

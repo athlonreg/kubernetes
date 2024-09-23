@@ -1,0 +1,109 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name: minio
+  labels:
+    app: minio
+spec:
+  ports:
+    - name: http
+      port: 9000
+      targetPort: 9000
+      nodePort: 39000
+  selector:
+    app: minio
+  type: NodePort
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: minio-console
+  labels:
+    app: minio
+spec:
+  ports:
+    - name: http
+      port: 9001
+      targetPort: 9001
+  selector:
+    app: minio
+---
+kind: Secret
+apiVersion: v1
+metadata:
+  name: minio
+  labels:
+    app: minio
+data:
+  rootPassword: MTIzNDU2
+  rootUser: YWRtaW4=
+type: Opaque
+---
+kind: StatefulSet
+apiVersion: apps/v1
+metadata:
+  name: minio
+  labels:
+    app: minio
+spec:
+  serviceName: minio
+  replicas: 1
+  selector:
+    matchLabels:
+      app: minio
+  template:
+    metadata:
+      name: minio
+      labels:
+        app: minio
+    spec:
+      containers:
+        - name: minio
+          image: 'minio:RELEASE.2022-03-17T06-34-49Z'
+          command:
+            - /bin/sh
+            - '-ce'
+            - >-
+              /usr/bin/docker-entrypoint.sh minio server /export 
+              --address :9000 --console-address :9001
+          ports:
+            - name: http
+              containerPort: 9000
+            - name: http-console
+              containerPort: 9001
+          env:
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: minio
+                  key: rootUser
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: minio
+                  key: rootPassword
+            - name: ENDPOINT
+              value: minio
+            - name: MINIO_PROMETHEUS_URL
+              value: 'prometheus-operated:9090'
+            - name: MINIO_PROMETHEUS_JOB_ID
+              value: minio-job
+            - name: MINIO_PROMETHEUS_AUTH_TYPE
+              value: public
+          volumeMounts:
+            - name: minio
+              mountPath: /export
+  volumeClaimTemplates:
+    - kind: PersistentVolumeClaim
+      apiVersion: v1
+      metadata:
+        name: minio
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 100Gi
+  podManagementPolicy: Parallel
+  updateStrategy:
+    type: RollingUpdate

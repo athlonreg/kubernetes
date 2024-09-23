@@ -1,0 +1,24 @@
+kind: StorageClass
+apiVersion: storage.k8s.io/v1
+metadata:
+  name: nfs
+  annotations:
+    resize.kubesphere.io/enabled: "true"
+    resize.kubesphere.io/increase: 10Gi
+    resize.kubesphere.io/storage-limit: 10000Gi
+    resize.kubesphere.io/threshold: 10%
+    restart.kubesphere.io/enabled: "true"
+    restart.kubesphere.io/max-time: "300"
+    restart.kubesphere.io/online-expansion-support: "true"
+    storageclass.beta.kubernetes.io/is-default-class: "true"
+    storageclass.kubernetes.io/is-default-class: "true"
+  labels:
+    app: nfs-client-provisioner
+parameters:
+  archiveOnDelete: "true"
+mountOptions:
+  - nfsvers=3
+provisioner: cluster.local/nfs-nfs-client-provisioner
+reclaimPolicy: Delete
+volumeBindingMode: Immediate
+allowVolumeExpansion: true

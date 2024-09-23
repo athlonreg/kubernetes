@@ -1,0 +1,50 @@
+apiVersion: postgres-operator.crunchydata.com/v1beta1
+kind: PostgresCluster
+metadata:
+  name: postgis
+spec:
+  image: /crunchy-postgres-gis:ubi8-14.7-3.3-0
+  postgresVersion: 14
+  users:
+    - name: postgres
+      databases:
+        - postgres
+        - pgo
+      password:
+        type: ASCII
+#  userInterface:
+#    pgAdmin:
+#      config:
+#        settings:
+#          SHOW_GRAVATAR_IMAGE: False
+#      dataVolumeClaimSpec:
+#        accessModes:
+#          - "ReadWriteOnce"
+#        resources:
+#          requests:
+#            storage: 1Gi
+  instances:
+    - name: postgis
+      replicas: 1
+      dataVolumeClaimSpec:
+        accessModes:
+        - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: 100Gi
+  backups:
+    pgbackrest:
+      image: /crunchy-pgbackrest:ubi8-2.41-4
+      repos:
+      - name: repo1
+        volume:
+          volumeClaimSpec:
+            accessModes:
+            - "ReadWriteOnce"
+            resources:
+              requests:
+                storage: 100Gi
+#  proxy:
+#    pgBouncer:
+#      image: /crunchy-pgbouncer:ubi8-1.18-0
+#      replicas: 1

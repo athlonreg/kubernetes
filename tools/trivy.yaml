@@ -1,0 +1,155 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: trivy
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 2Gi
+  volumeMode: Filesystem
+  storageClassName: nfs
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: trivy
+  labels:
+    app: trivy
+data:
+  images: |
+    ## kubernetes
+    - kube-apiserver:v1.23.7
+    - kube-controller-manager:v1.23.7
+    - kube-proxy:v1.23.7
+    - kube-scheduler:v1.23.7
+    - pause:3.6
+    - coredns:1.8.6
+    - cni:v3.23.2
+    - kube-controllers:v3.23.2
+    - node:v3.23.2
+    - pod2daemon-flexvol:v3.23.2
+    - typha:v3.23.2
+    - flannel:v0.12.0
+    - provisioner-localpv:3.3.0
+    - linux-utils:3.3.0
+    - haproxy:2.3
+    - nfs-subdir-external-provisioner:v4.0.2
+    - k8s-dns-node-cache:1.15.12
+    ## kubesphere
+    - ks-installer:v3.3.0
+    - ks-apiserver:v3.3.0
+    - ks-console:v3.3.0
+    - ks-controller-manager:v3.3.0
+    - kubectl:v1.22.0
+    - kubefed:v0.8.1
+    - tower:v0.2.0
+    - minio:RELEASE.2019-08-07T01-59-21Z
+    - mc:RELEASE.2019-08-07T23-14-43Z
+    - snapshot-controller:v4.0.0
+    - defaultbackend-amd64:1.4
+    - metrics-server:v0.4.2
+    - redis:5.0.14-alpine
+    - haproxy:2.0.25-alpine
+    ## monitoring
+    - configmap-reload:v0.5.0
+    - prometheus:v2.34.0
+    - prometheus-config-reloader:v0.55.1
+    - prometheus-operator:v0.55.1
+    - kube-state-metrics:v2.3.0
+    - node-exporter:v1.3.1
+    - alertmanager:v0.23.0
+    - kube-rbac-proxy:v0.8.0
+    - kube-rbac-proxy:v0.11.0
+    - notification-manager-operator:v1.4.0
+    - notification-manager:v1.4.0
+    - notification-tenant-sidecar:v3.2.0
+    ## weave
+    - scope:1.13.0
+    ## tools
+    - busybox:1.35.0
+    ## middleware
+    - eck-operator:2.4.0
+    - elasticsearch:7.17.6
+    - kafka:0.27.1-kafka-2.8.1
+    - kafka-operator:0.27.1
+    - mc:RELEASE.2022-03-17T07-21-29Z
+    - minio:RELEASE.2022-03-17T06-34-49Z
+    - mongo:4.4.13
+    - mysql:8.0
+    - nacos-server:v2.1.0-slim
+    - nginx:1.21.6-alpine
+    - redis:6.2.7-alpine
+    - xxl-job-admin:2.3.0
+    ## monitor-exporter
+    - grafana:8.3.3
+    - node-exporter:master
+    - mysqld-exporter:main
+    - postgres-exporter:master
+    - redis-exporter:alpine
+    - elasticsearch-exporter:master
+    - mongodb-exporter:2.37
+    ## tools
+    - kafka-map:1.2.1
+    - redisinsight:latest
+    - mysql-client:8.0
+    - sql-studio:1.6.0
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  labels:
+    app: trivy
+  name: trivy
+spec:
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    metadata:
+      labels:
+        app: trivy
+    spec:
+      template:
+        spec:
+          hostAliases:
+            - ip: "192.168.1.1"
+              hostnames:
+                - "example.com"
+          containers:
+            - name: trivy
+              image: 'trivy:0.41.0'
+              volumeMounts:
+                - name: trivy
+                  mountPath: /data
+                - name: images
+                  mountPath: /etc/trivy
+                - name: docker
+                  mountPath: /var/run/docker.sock
+              command:
+                - /bin/sh
+                - '-cex'
+                - >-
+                  FILENAME=$(date +%Y-%m-%d).txt ;
+                  echo "" > /data/${FILENAME} ;
+                  for image in $(cat /etc/trivy/images | grep hub | grep -v "^#" | awk '{print $2}') ;
+                  do
+                    echo SCANNING ${image}... ;
+                    echo ${image} >> /data/${FILENAME} ;
+                    trivy image --docker-host /var/run/docker.sock --format table --skip-db-update --skip-java-db-update --offline-scan --insecure ${image} >> /data/${FILENAME} ;
+                    echo "" >> /data/${FILENAME} ;
+                  done
+          restartPolicy: OnFailure
+          volumes:
+            - name: trivy
+              persistentVolumeClaim:
+                claimName: trivy
+            - name: images
+              configMap:
+                name: trivy
+            - name: docker
+              hostPath:
+                path: /var/run/docker.sock
+                type: ''
+      backoffLimit: 10
+  schedule: 0 0 * * *
+  startingDeadlineSeconds: 10

@@ -1,0 +1,157 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mysql
+data:
+  MYSQL_ROOT_PASSWORD: Z2VvdmlzQDEyMw==
+type: Opaque
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mysql
+  labels:
+    app: mysql
+data:
+  my.cnf: |
+    [mysqld]
+    authentication_policy=mysql_native_password
+    skip_name_resolve=1
+    explicit_defaults_for_timestamp=1
+    user=mysql
+    explicit_defaults_for_timestamp
+    max_allowed_packet=32M
+    bind-address=0.0.0.0
+    character-set-server=UTF8MB4
+    collation-server=utf8mb4_unicode_ci
+    lower_case_table_names=1
+    wait_timeout=86400
+    default-time_zone='+8:00'
+    interactive_timeout=7200
+    max_connections=100000
+    sync_binlog=1
+    relay_log_recovery=1
+    log_timestamps=system
+    innodb_log_file_size=128M
+    innodb_buffer_pool_size=12G
+    innodb_buffer_pool_instances=16
+    innodb_data_file_path=ibdata1:1024M:autoextend
+    innodb_flush_log_at_trx_commit=2
+    innodb_log_buffer_size=16M
+    innodb_log_file_size=1024M
+    innodb_log_files_in_group=4
+    innodb_max_dirty_pages_pct=75
+    innodb_file_per_table=1
+    innodb_io_capacity=2000
+    innodb_io_capacity_max=8000
+    transaction_isolation=READ-COMMITTED
+    innodb_flush_method=O_DIRECT
+    innodb_thread_concurrency= 0
+    innodb_print_all_deadlocks=on
+    innodb_deadlock_detect=on
+    innodb_lock_wait_timeout=30
+    innodb_parallel_read_threads=4
+    information_schema_stats_expiry=1800
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql
+  labels:
+    app: mysql
+spec:
+  ports:
+    - name: mysql
+      port: 3306
+  selector:
+    app: mysql
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mysql
+spec:
+  selector:
+    matchLabels:
+      app: mysql
+  serviceName: mysql
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: mysql
+    spec:
+      nodeSelector:
+        mysql: 'true'
+      containers:
+        - name: mysql
+          image: /mysql:8.0
+          env:
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mysql
+                  key: MYSQL_ROOT_PASSWORD
+            - name: MYSQL_ROOT_HOST
+              value: '%'
+          ports:
+            - name: mysql
+              containerPort: 3306
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/mysql
+            - name: conf
+              readOnly: true
+              mountPath: /etc/my.cnf
+              subPath: my.cnf
+          resources:
+            requests:
+              cpu: 4000m
+              memory: 16Gi
+            limits:
+              cpu: 4000m
+              memory: 16Gi
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - "-c"
+                - MYSQL_PWD="${MYSQL_ROOT_PASSWORD}"
+                - mysqladmin ping
+            #              tcpSocket:
+            #                port: 3006
+            initialDelaySeconds: 20
+            periodSeconds: 30
+            timeoutSeconds: 10
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - "-c"
+                - MYSQL_PWD="${MYSQL_ROOT_PASSWORD}"
+                - mysql -h 127.0.0.1 -u root -e "SELECT 1"
+            #              tcpSocket:
+            #                port: 3006
+            initialDelaySeconds: 20
+            periodSeconds: 15
+            timeoutSeconds: 10
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: data
+        - name: conf
+          configMap:
+            name: mysql
+            items:
+              - key: my.cnf
+                path: my.cnf
+            defaultMode: 420
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - "ReadWriteMany"
+        resources:
+          requests:
+            storage: 100Gi

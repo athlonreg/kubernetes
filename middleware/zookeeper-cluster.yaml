@@ -1,0 +1,123 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: zookeeper
+  labels:
+    app: zookeeper
+    app.kubernetes.io/name: zookeeper
+  annotations:
+    kubesphere.io/creator: admin
+    kubesphere.io/description: 选举服务
+spec:
+  ports:
+    - name: client
+      port: 2181
+    - name: follower
+      port: 2888
+    - name: election
+      port: 3888
+    - name: adminserver
+      port: 8080
+  clusterIP: None
+  selector:
+    app: zookeeper
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: zookeeper
+  annotations:
+    kubesphere.io/creator: admin
+    kubesphere.io/description: 选举服务
+spec:
+  selector:
+    matchLabels:
+      app: zookeeper
+  maxUnavailable: 1
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: zookeeper
+  annotations:
+    kubesphere.io/creator: admin
+    kubesphere.io/description: 选举服务
+spec:
+  serviceName: zookeeper
+  replicas: 3
+  selector:
+    matchLabels:
+      app: zookeeper
+  template:
+    metadata:
+      labels:
+        app: zookeeper
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: zookeeper
+                topologyKey: kubernetes.io/hostname
+      containers:
+        - name: zookeeper
+          image: /zookeeper:3.7.0
+          livenessProbe:
+            tcpSocket:
+              port: 2181
+            initialDelaySeconds: 5
+            timeoutSeconds: 10
+            periodSeconds: 30
+            successThreshold: 1
+            failureThreshold: 3
+          command: ['/bin/sh', '-c']
+          args:
+            - export ZOO_MY_ID=$(expr $(echo $HOSTNAME | sed 's/zookeeper-//') + 1);
+              /docker-entrypoint.sh zkServer.sh start-foreground
+          resources:
+            requests:
+              cpu: 100m
+              memory: 512Mi
+            limits:
+              cpu: 1000m
+              memory: 8Gi
+          ports:
+            - containerPort: 2181
+              name: client
+            - containerPort: 2888
+              name: follower
+            - containerPort: 3888
+              name: election
+            - containerPort: 8080
+              name: adminserver
+          env:
+            - name: ZOO_INIT_LIMIT
+              value: "10"
+            - name: ZOO_SYNC_LIMIT
+              value: "5"
+            - name: ZOO_MAX_CLIENT_CNXNS
+              value: "60"
+            - name: ZOO_4LW_COMMANDS_WHITELIST
+              value: "srvr, mntr, ruok"
+            - name: ZOO_SERVERS
+              value: "server.1=zookeeper-0.zookeeper:2888:3888;2181 server.2=zookeeper-1.zookeeper:2888:3888;2181 server.3=zookeeper-2.zookeeper:2888:3888;2181"
+            - name: ZOO_CFG_EXTRA
+              value: "maxCnxns=0 preAllocSize=65536 snapCount=100000 reconfigEnabled=false quorumListenOnAllIPs=true maxSessionTimeout=40000"
+          volumeMounts:
+            - name: zookeeper
+              mountPath: /data
+  volumeClaimTemplates:
+    - kind: PersistentVolumeClaim
+      apiVersion: v1
+      metadata:
+        name: zookeeper
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 20Gi
+        volumeMode: Filesystem

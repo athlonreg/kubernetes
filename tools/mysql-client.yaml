@@ -1,0 +1,14 @@
+kind: Pod
+apiVersion: v1
+metadata:
+  name: mysql-client
+  labels:
+    app: mysql-client
+spec:
+  containers:
+    - name: mysql-client
+      image: '/mysql-client:8.0'
+      command:
+        - sleep
+      args:
+        - infinity

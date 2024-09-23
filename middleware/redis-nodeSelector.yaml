@@ -1,0 +1,100 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  labels:
+    app: redis
+  annotations:
+    kubesphere.io/creator: admin
+    kubesphere.io/description: 缓存数据库
+spec:
+  ports:
+    - port: 6379
+      name: redis
+  clusterIP: None
+  selector:
+    app: redis
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis
+  annotations:
+    kubesphere.io/creator: admin
+    kubesphere.io/description: 缓存数据库
+data:
+  redis.conf: |
+    appendonly yes
+    requirepass 123456
+    protected-mode no
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis
+  labels:
+    app: redis
+  annotations:
+    kubesphere.io/creator: admin
+    kubesphere.io/description: 缓存数据库
+spec:
+  serviceName: redis
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      nodeSelector:
+        redis: 'true'
+      containers:
+        - name: redis
+          image: /redis:6.2.7-alpine
+          readinessProbe:
+            tcpSocket:
+              port: 6379
+            initialDelaySeconds: 5
+            timeoutSeconds: 10
+            periodSeconds: 15
+          livenessProbe:
+            tcpSocket:
+              port: 6379
+            initialDelaySeconds: 5
+            timeoutSeconds: 10
+            periodSeconds: 30
+            successThreshold: 1
+            failureThreshold: 3
+          command:
+            - redis-server
+          args:
+            - '--requirepass 123456'
+          ports:
+            - name: redis
+              containerPort: 6379
+          volumeMounts:
+            - name: redis
+              mountPath: /data
+            - name: conf
+              mountPath: /etc/redis
+      volumes:
+        - name: conf
+          configMap:
+            name: redis
+            items:
+              - key: redis.conf
+                path: redis.conf
+  volumeClaimTemplates:
+    - kind: PersistentVolumeClaim
+      apiVersion: v1
+      metadata:
+        name: redis
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 1Gi
+        volumeMode: Filesystem

@@ -1,0 +1,158 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: nacos
+  labels:
+    app: nacos
+spec:
+  ports:
+    - port: 7848
+      name: condition
+    - port: 8848
+      name: client
+    - name: client-rpc
+      port: 9848
+    - name: grpc
+      port: 9849
+  clusterIP: None
+  selector:
+    app: nacos
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nacos
+data:
+  application.properties: |
+    server.servlet.contextPath=/nacos
+    server.port=8848
+    spring.datasource.platform=mysql
+    db.num=1
+    db.url.0=jdbc:mysql://mysql:3306/nacos?characterEncoding=utf8&connectTimeout=1000&socketTimeout=3000&autoReconnect=true&useUnicode=true&useSSL=false&serverTimezone=UTC
+    db.user=root
+    db.password=123456
+    nacos.naming.empty-service.auto-clean=true
+    nacos.naming.empty-service.clean.initial-delay-ms=50000
+    nacos.naming.empty-service.clean.period-time-ms=30000
+    management.metrics.export.elastic.enabled=false
+    management.metrics.export.influx.enabled=false
+    server.tomcat.accesslog.enabled=false
+    server.tomcat.accesslog.pattern=%h %l %u %t "%r" %s %b %D %{User-Agent}i
+    server.tomcat.basedir=
+    nacos.security.ignore.urls=/,/error,/**/*.css,/**/*.js,/**/*.html,/**/*.map,/**/*.svg,/**/*.png,/**/*.ico,/console-fe/public/**,/v1/auth/**,/v1/console/health/**,/actuator/**,/v1/console/server/**
+    nacos.core.auth.system.type=nacos
+    nacos.core.auth.enabled=false
+    nacos.core.auth.default.token.expire.seconds=18000
+    nacos.core.auth.default.token.secret.key=SecretKey012345678901234567890123456789012345678901234567890123456789
+    nacos.core.auth.caching.enabled=true
+    nacos.istio.mcp.server.enabled=false
+  cluster.conf: |
+    nacos-0.nacos.ismart.svc.cluster.local:8848
+    nacos-1.nacos.ismart.svc.cluster.local:8848
+    nacos-2.nacos.ismart.svc.cluster.local:8848
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: nacos
+  labels:
+    app: nacos
+spec:
+  serviceName: nacos
+  replicas: 3
+  selector:
+    matchLabels:
+      app: nacos
+  template:
+    metadata:
+      labels:
+        app: nacos
+    spec:
+      nodeSelector:
+        middleware: 'true'
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: nacos
+                topologyKey: kubernetes.io/hostname
+      initContainers:
+        - name: init-mysql
+          image: /kubectl:v1.22.0
+          command: ['/bin/sh', '-c']
+          args:
+            - echo "Prepare to MySQL initializing...";
+              until nc -w 1 -z mysql 3306;
+              do echo "Waiting for MySQL initialization complete..."; sleep 10; done;
+              echo "MySQL has initialized...";
+      containers:
+        - name: nacos
+          image: /nacos-server:v2.1.0-slim
+          readinessProbe:
+            tcpSocket:
+              port: 8848
+            initialDelaySeconds: 20
+            timeoutSeconds: 10
+            periodSeconds: 15
+          livenessProbe:
+            tcpSocket:
+              port: 8848
+            initialDelaySeconds: 20
+            timeoutSeconds: 10
+            periodSeconds: 30
+            successThreshold: 1
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 500m
+              memory: 2000Mi
+            limits:
+              cpu: 500m
+              memory: 2000Mi
+          ports:
+            - containerPort: 7848
+              name: condition
+            - containerPort: 8848
+              name: client
+            - containerPort: 9848
+              name: client-rpc
+            - containerPort: 9849
+              name: grpc
+          env:
+            - name: NACOS_REPLICAS
+              value: "3"
+            - name: NACOS_SERVER_PORT
+              value: "8848"
+            - name: NACOS_APPLICATION_PORT
+              value: "8848"
+            - name: PREFER_HOST_MODE
+              value: "hostname"
+            - name: NACOS_SERVERS
+              value: "nacos-0.nacos.ismart.svc.cluster.local:8848 nacos-1.nacos.ismart.svc.cluster.local:8848 nacos-2.nacos.ismart.svc.cluster.local:8848"
+          volumeMounts:
+            - name: application-properties
+              readOnly: true
+              mountPath: /home/nacos/conf/application.properties
+              subPath: application.properties
+            - name: cluster-conf
+              readOnly: true
+              mountPath: /home/nacos/conf/cluster.conf
+              subPath: cluster.conf
+      volumes:
+        - name: application-properties
+          configMap:
+            name: nacos
+            items:
+              - key: application.properties
+                path: application.properties
+            defaultMode: 420
+        - name: cluster-conf
+          configMap:
+            name: nacos
+            items:
+              - key: cluster.conf
+                path: cluster.conf
+            defaultMode: 420

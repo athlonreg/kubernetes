@@ -1,0 +1,96 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: redis
+data:
+  password: Z2VvdmlzQDEyMw==
+type: Opaque
+---
+apiVersion: databases.spotahome.com/v1
+kind: RedisFailover
+metadata:
+  name: redis
+spec:
+  auth:
+    secretPath: redis
+  sentinel:
+    nodeSelector:
+      redis: 'true'
+    replicas: 3
+    resources:
+      requests:
+        cpu: 100m
+        memory: 100Mi
+      limits:
+        cpu: 100m
+        memory: 100Mi
+    image: /redis:6.2.7-alpine
+    imagePullPolicy: IfNotPresent
+    securityContext:
+      runAsUser: 1000
+      runAsGroup: 1000
+      fsGroup: 1000
+    exporter:
+      enabled: true
+      image: /redis-exporter:alpine
+    customConfig:
+      - "appendonly yes"
+      - "protected-mode no"
+      - "down-after-milliseconds 2000"
+      - "failover-timeout 3000"
+    topologySpreadConstraints:
+      - labelSelector:
+          matchLabels:
+            app.kubernetes.io/component: sentinel
+        maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: DoNotSchedule
+  redis:
+    nodeSelector:
+      redis: 'true'
+    replicas: 3
+    resources:
+      requests:
+        cpu: 100m
+        memory: 100Mi
+      limits:
+        cpu: 400m
+        memory: 500Mi
+    image: /redis:6.2.7-alpine
+    imagePullPolicy: IfNotPresent
+    securityContext:
+      runAsUser: 1000
+      runAsGroup: 1000
+      fsGroup: 1000
+    containerSecurityContext:
+      readOnlyRootFilesystem: false
+    storage:
+      keepAfterDeletion: true
+      persistentVolumeClaim:
+        metadata:
+          name: redis
+        spec:
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 1Gi
+    exporter:
+      enabled: true
+      image: /redis-exporter:alpine
+    customConfig:
+      - "appendonly yes"
+      - "protected-mode no"
+      - "hz 50"
+      - "timeout 60"
+      - "tcp-keepalive 60"
+      - "client-output-buffer-limit normal 0 0 0"
+      - "client-output-buffer-limit slave 1000000000 1000000000 0"
+      - "client-output-buffer-limit pubsub 33554432 8388608 60"
+    topologySpreadConstraints:
+      - labelSelector:
+          matchLabels:
+            app.kubernetes.io/component: redis
+        maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: DoNotSchedule

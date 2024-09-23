@@ -1,0 +1,21 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name: elasticsearch-es-http-nodeport
+  namespace: ismart
+  labels:
+    common.k8s.elastic.co/type: elasticsearch
+    elasticsearch.k8s.elastic.co/cluster-name: elasticsearch
+  annotations:
+    kubesphere.io/description: elasticsearch外部访问端口
+spec:
+  ports:
+    - name: http
+      protocol: TCP
+      port: 9200
+      targetPort: 9200
+      nodePort: 39200
+  selector:
+    common.k8s.elastic.co/type: elasticsearch
+    elasticsearch.k8s.elastic.co/cluster-name: elasticsearch
+  type: NodePort

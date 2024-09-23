@@ -1,0 +1,76 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: rcp
+spec:
+  ports:
+    - name: rcp
+      port: 7777
+      targetPort: 7777
+  selector:
+    app: rcp
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rcp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rcp
+  template:
+    metadata:
+      labels:
+        app: rcp
+    spec:
+      initContainers:
+        - name: init
+          image: '/predixy:1.0.5'
+          command:
+            - sh
+            - '-c'
+          args:
+            - >-
+              while [ "$(redis-cli -h redis-headless -c cluster info | grep
+              state | awk -F ':' '{print $2}' | md5sum | awk '{print $1}')" !=
+              "d3accd33402becc720abebee93ebe193" ]; do echo "Waiting for redis
+              initialization complete..."; sleep 10; done; echo "redis has
+              initialized...";
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: rcp
+                topologyKey: kubernetes.io/hostname
+      containers:
+        - name: rcp
+          image: redis-cluster-proxy:1.0
+          args:
+            - redis-headless.dev.svc.cluster.local:6379
+          ports:
+            - containerPort: 7777
+          resources:
+            requests:
+              cpu: 100m
+              memory: 100Mi
+            limits:
+              cpu: 100m
+              memory: 100Mi
+          readinessProbe:
+            tcpSocket:
+              port: 7777
+            initialDelaySeconds: 5
+            timeoutSeconds: 5
+            periodSeconds: 15
+          livenessProbe:
+            tcpSocket:
+              port: 7777
+            initialDelaySeconds: 5
+            timeoutSeconds: 10
+            periodSeconds: 30
+            successThreshold: 1
+            failureThreshold: 3

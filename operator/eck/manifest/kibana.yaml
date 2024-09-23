@@ -1,0 +1,21 @@
+apiVersion: kibana.k8s.elastic.co/v1
+kind: Kibana
+metadata:
+  name: kibana
+spec:
+  version: 7.17.6
+  image: /kibana:7.17.6
+  count: 1
+  http:
+    tls:
+      selfSignedCertificate:
+        disabled: true
+  podTemplate:
+    spec:
+      containers:
+        - name: kibana
+          env:
+            - name: I18N_LOCALE
+              value: zh-CN
+  elasticsearchRef:
+    name: elasticsearch

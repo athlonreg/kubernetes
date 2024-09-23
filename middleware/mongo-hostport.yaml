@@ -1,0 +1,77 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongo
+  labels:
+    app: mongo
+  annotations:
+    kubesphere.io/creator: admin
+    kubesphere.io/description: NoSQL 数据库
+spec:
+  ports:
+    - name: mongo
+      port: 27017
+  clusterIP: None
+  selector:
+    app: mongo
+---
+kind: StatefulSet
+apiVersion: apps/v1
+metadata:
+  name: mongo
+  labels:
+    app: mongo
+  annotations:
+    kubesphere.io/creator: admin
+    kubesphere.io/description: NoSQL 数据库
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: mongo
+  template:
+    metadata:
+      labels:
+        app: mongo
+    spec:
+      containers:
+        - name: mongo
+          image: '/mongo:4.4.13'
+          command:
+            - mongod
+            - '--replSet'
+            - rs
+            - '--bind_ip'
+            - 0.0.0.0
+            - '--clusterAuthMode'
+            - keyFile
+            - '--keyFile'
+            - /data/mongo-keyfile
+          ports:
+            - name: mongo
+              hostPort: 37017
+              containerPort: 27017
+              protocol: TCP
+          env:
+            - name: MONGO_INITDB_ROOT_USERNAME
+              value: admin
+            - name: MONGO_INITDB_ROOT_PASSWORD
+              value: 123456
+            - name: MONGO_INITDB_DATABASE
+              value: template
+          volumeMounts:
+            - name: mongo
+              mountPath: /data/db
+  volumeClaimTemplates:
+    - kind: PersistentVolumeClaim
+      apiVersion: v1
+      metadata:
+        name: mongo
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 20Gi
+        volumeMode: Filesystem
+  serviceName: mongo

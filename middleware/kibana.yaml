@@ -1,0 +1,80 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name: kibana
+  labels:
+    app: kibana
+  annotations:
+    kubesphere.io/creator: admin
+spec:
+  ports:
+    - port: 5601
+      targetPort: 5601
+      nodePort: 35601
+  selector:
+    app: kibana
+  type: NodePort
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: kibana
+  labels:
+    app: kibana
+data:
+  kibana.yml: |-
+    server.name: kibana
+    server.host: "0"
+    monitoring.ui.container.elasticsearch.enabled: true
+    elasticsearch.hosts: ["http://elasticsearch:9200"]
+    xpack.security.enabled: true
+---
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: kibana
+  labels:
+    app: kibana
+  annotations:
+    kubesphere.io/creator: admin
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kibana
+  template:
+    metadata:
+      labels:
+        app: kibana
+    spec:
+      volumes:
+        - name: config
+          configMap:
+            name: kibana
+            defaultMode: 420
+      containers:
+        - name: kibana
+          image: /kibana:7.17.6
+          readinessProbe:
+            tcpSocket:
+              port: 5601
+            initialDelaySeconds: 5
+            timeoutSeconds: 5
+            periodSeconds: 15
+          livenessProbe:
+            tcpSocket:
+              port: 5601
+            initialDelaySeconds: 5
+            timeoutSeconds: 10
+            periodSeconds: 30
+            successThreshold: 1
+            failureThreshold: 3
+          ports:
+            - containerPort: 5601
+          env:
+            - name: I18N_LOCALE
+              value: zh-CN
+          volumeMounts:
+            - name: config
+              mountPath: /usr/share/kibana/config/kibana.yml
+              subPath: kibana.yml

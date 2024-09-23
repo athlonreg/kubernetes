@@ -1,0 +1,105 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-slave
+  labels:
+    app: redis-slave
+  annotations:
+    kubesphere.io/creator: admin
+    kubesphere.io/description: 缓存数据库
+spec:
+  clusterIP: None
+  ports:
+    - port: 6379
+      name: redis-slave
+  selector:
+    app: redis-slave
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis-slave
+  labels:
+    app: redis-slave
+  annotations:
+    kubesphere.io/creator: admin
+    kubesphere.io/description: 缓存数据库
+spec:
+  serviceName: redis-slave
+  replicas: 2
+  selector:
+    matchLabels:
+      app: redis-slave
+  template:
+    metadata:
+      labels:
+        app: redis-slave
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: redis-slave
+                topologyKey: kubernetes.io/hostname
+      initContainers:
+        - name: init-master
+          image: /busybox:1.35.0
+          command: ['/bin/sh', '-c']
+          args:
+            - echo "Prepare to redis initializing...";
+              until nc -w 1 -z redis 6379;
+              do echo "Waiting for redis initialization complete..."; sleep 10; done;
+              echo "redis has initialized...";
+      containers:
+        - name: redis-slave
+          image: /redis:6.2.7-alpine
+          readinessProbe:
+            tcpSocket:
+              port: 6379
+            initialDelaySeconds: 5
+            timeoutSeconds: 5
+            periodSeconds: 15
+          livenessProbe:
+            tcpSocket:
+              port: 6379
+            initialDelaySeconds: 5
+            timeoutSeconds: 10
+            periodSeconds: 30
+            successThreshold: 1
+            failureThreshold: 3
+          command:
+            - redis-server
+          args:
+            - --slaveof redis-0.redis 6379
+            - --masterauth 123456
+            - --requirepass 123456
+          ports:
+            - name: redis-slave
+              containerPort: 6379
+          volumeMounts:
+            - name: redis-slave
+              mountPath: /data
+            - name: conf
+              mountPath: /etc/redis
+      volumes:
+        - name: conf
+          configMap:
+            name: redis
+            items:
+              - key: redis.conf
+                path: redis.conf
+  volumeClaimTemplates:
+    - kind: PersistentVolumeClaim
+      apiVersion: v1
+      metadata:
+        name: redis-slave
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 50Gi
+        volumeMode: Filesystem

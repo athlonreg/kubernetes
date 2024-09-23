@@ -1,0 +1,120 @@
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: minio-upload-object-job
+data:
+  mirror.sh: |
+    #/bin/sh
+
+    until [ -f /data/status ] && [ "$(cat /data/status)" == "ok" ]
+    do
+      echo "preparing data..."
+      sleep 10
+    done
+    
+    cd /data
+    mc mirror bucket1 minio/bucket1 --overwrite -a
+  config.json: |
+    {
+      "version": "10",
+      "aliases": {
+        "minio": {
+          "url": "http://minio:9000",
+          "accessKey": "admin",
+          "secretKey": "123456",
+          "api": "S3v4",
+          "path": "auto"
+        }
+      }
+    }
+  status: |
+    no
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: minio-upload-object-job
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 2Gi
+  volumeMode: Filesystem
+---
+kind: Pod
+apiVersion: v1
+metadata:
+  name: minio-object-to-copy
+  labels:
+    app: minio-object-to-copy
+spec:
+  volumes:
+    - name: minio-upload-object-job
+      persistentVolumeClaim:
+        claimName: minio-upload-object-job
+  containers:
+    - name: minio-object-to-copy
+      image: kubectl:v1.22.0
+      command:
+        - sleep
+      args:
+        - infinity
+      volumeMounts:
+        - name: minio-upload-object-job
+          mountPath: /data
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  labels:
+    app: minio-upload-object-job
+  name: minio-upload-object-job
+spec:
+  backoffLimit: 6
+  completionMode: NonIndexed
+  completions: 1
+  parallelism: 1
+  suspend: false
+  template:
+    metadata:
+      labels:
+        app: minio-upload-object-job
+    spec:
+      containers:
+        - name: mc
+          command: ['/bin/sh', '-c']
+          args:
+            - /mirror.sh
+          image: mc:RELEASE.2022-03-17T07-21-29Z
+          resources:
+            requests:
+              memory: 128Mi
+          volumeMounts:
+            - name: minio-upload-object-job
+              mountPath: /data
+            - name: minio-mirror
+              mountPath: /mirror.sh
+              subPath: mirror.sh
+            - name: mc-config
+              mountPath: /root/.mc/config.json
+              subPath: config.json
+      restartPolicy: OnFailure
+      volumes:
+        - name: minio-mirror
+          configMap:
+            name: minio-upload-object-job
+            items:
+              - key: mirror.sh
+                path: mirror.sh
+            defaultMode: 0755
+        - name: mc-config
+          configMap:
+            name: minio-upload-object-job
+            items:
+              - key: config.json
+                path: config.json
+            defaultMode: 0600
+        - name: minio-upload-object-job
+          persistentVolumeClaim:
+            claimName: minio-upload-object-job

@@ -1,0 +1,127 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: flink
+  labels:
+    app: flink
+  annotations:
+    kubesphere.io/creator: admin
+    kubesphere.io/description: 流式计算服务
+spec:
+  type: NodePort
+  ports:
+    - port: 8081
+      name: flink
+      targetPort: 8081
+      nodePort: 38081
+  selector:
+    app: flink
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: flink-cm
+  annotations:
+    kubesphere.io/creator: admin
+    kubesphere.io/description: 流式计算服务
+data:
+  flink-conf.yaml: |
+    jobmanager.rpc.address: localhost
+    jobmanager.rpc.port: 6123
+    jobmanager.memory.process.size: 1600m
+    taskmanager.memory.process.size: 1728m
+    taskmanager.numberOfTaskSlots: 1
+    parallelism.default: 1
+    high-availability: zookeeper
+    high-availability.zookeeper.path.root: /flink
+    high-availability.cluster-id: /flinkcluster
+    high-availability.storageDir: file:///usr/local/flink/recovery
+    high-availability.zookeeper.quorum: zookeeper-0.zookeeper-headless:2181,zookeeper-1.zookeeper-headless:2181,zookeeper-2.zookeeper-headless:2181
+    jobmanager.execution.failover-strategy: region
+    classloader.resolve-order: parent-first
+  masters: |
+    flink-0.flink-headless:8081
+    flink-1.flink-headless:8081
+    flink-2.flink-headless:8081
+  workers: |
+    flink-0.flink-headless
+    flink-1.flink-headless
+    flink-2.flink-headless
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: flink
+  labels:
+    app: flink
+  annotations:
+    kubesphere.io/creator: admin
+    kubesphere.io/description: 流式计算服务
+spec:
+  serviceName: flink
+  replicas: 3
+  selector:
+    matchLabels:
+      app: flink
+  template:
+    metadata:
+      labels:
+        app: flink
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: flink
+                topologyKey: kubernetes.io/hostname
+      containers:
+        - name: flink
+          image: /flink:1.14.3
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512Mi
+            limits:
+              cpu: 4
+              memory: 8Gi
+          ports:
+            - containerPort: 8081
+              name: flink
+          volumeMounts:
+            - name: flink-conf-yaml
+              readOnly: true
+              mountPath: /usr/local/flink/conf/flink-conf.yaml
+              subPath: flink-conf.yaml
+            - name: masters
+              readOnly: true
+              mountPath: /usr/local/flink/conf/masters
+              subPath: masters
+            - name: workers
+              readOnly: true
+              mountPath: /usr/local/flink/conf/workers
+              subPath: workers
+      volumes:
+        - name: flink-conf-yaml
+          configMap:
+            name: flink-cm
+            items:
+              - key: flink-conf.yaml
+                path: flink-conf.yaml
+            defaultMode: 420
+        - name: masters
+          configMap:
+            name: flink-cm
+            items:
+              - key: masters
+                path: masters
+            defaultMode: 420
+        - name: workers
+          configMap:
+            name: flink-cm
+            items:
+              - key: workers
+                path: workers
+            defaultMode: 420

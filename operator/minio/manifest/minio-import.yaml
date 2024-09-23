@@ -1,0 +1,118 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name: minio-node
+  labels:
+    v1.min.io/tenant: minio
+spec:
+  ports:
+    - name: http-minio
+      protocol: TCP
+      port: 9000
+      targetPort: 9000
+      nodePort: 39000
+    - name: http-console
+      protocol: TCP
+      port: 9090
+      targetPort: 9090
+      nodePort: 39001
+  selector:
+    v1.min.io/tenant: minio
+  type: NodePort
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: minio-import
+  labels:
+    app: minio-import
+data:
+  import.sh: >-
+    #!/bin/sh
+    
+    set -ex
+    
+    mc alias set minio $SCHEME://$MINIO_ENDPOINT:$MINIO_PORT $ACCESS $SECRET
+    
+    mc admin user add minio ${ROOT_USER} ${ROOT_PASSWORD}
+    
+    mc admin policy attach minio consoleAdmin --user ${ROOT_USER}
+    
+    for i in bucket1 bucket2 ; do mc mb minio/$i ; mc policy set public minio/$i ; done
+    
+    cd /data/resources
+    
+    for i in $(ls) ; do echo "mirroring ${i} ..." ; mc mirror ${i} minio/${i} --overwrite -a ; done
+---
+kind: Secret
+apiVersion: v1
+metadata:
+  name: minio
+  labels:
+    app: minio
+data:
+  ROOT_USER: YWRtaW4=
+  ROOT_PASSWORD: Z2VvdmlzQDEyMw==
+type: Opaque
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  labels:
+    app: minio-import
+  name: minio-import
+spec:
+  backoffLimit: 6
+  completionMode: NonIndexed
+  completions: 1
+  parallelism: 1
+  suspend: false
+  template:
+    metadata:
+      labels:
+        app: minio-import
+    spec:
+      containers:
+        - name: minio-import
+          command:
+            - /bin/sh
+            - /minio-import/import.sh
+          image: /mc:RELEASE.2023-06-23T18-12-07Z
+          env:
+            - name: SCHEME
+              value: http
+            - name: MINIO_ENDPOINT
+              value: minio
+            - name: MINIO_PORT
+              value: '80'
+            - name: ACCESS
+              valueFrom:
+                secretKeyRef:
+                  key: CONSOLE_ACCESS_KEY
+                  name: minio-user-1
+            - name: SECRET
+              valueFrom:
+                secretKeyRef:
+                  key: CONSOLE_SECRET_KEY
+                  name: minio-user-1
+            - name: ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  key: ROOT_USER
+                  name: minio
+            - name: ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: ROOT_PASSWORD
+                  name: minio
+          resources:
+            requests:
+              memory: 128Mi
+          volumeMounts:
+            - mountPath: /minio-import
+              name: minio-import
+      volumes:
+        - name: minio-import
+          configMap:
+            name: minio-import
+      restartPolicy: OnFailure

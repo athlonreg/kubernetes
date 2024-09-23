@@ -1,0 +1,14 @@
+apiVersion: mariadb.mmontes.io/v1alpha1
+kind: SqlJob
+metadata:
+  name: mariadb
+spec:
+  mariaDbRef:
+    name: mariadb
+  username: root
+  passwordSecretKeyRef:
+    name: mariadb
+    key: root-password
+  database: mysql
+  sql: |
+    ALTER USER 'repl'@'%' IDENTIFIED BY '123456';

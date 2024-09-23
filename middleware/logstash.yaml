@@ -1,0 +1,268 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: logstash
+  annotations:
+    kubesphere.io/creator: admin
+    kubesphere.io/description: 索引同步服务
+data:
+  logstash.conf: |
+    input {
+        stdin {}
+        jdbc {
+            type => "city"
+            jdbc_connection_string => "jdbc:mysql://mysql-primary:3306/test?characterEncoding=UTF-8&autoReconnect=true"
+            jdbc_user => "root"
+            jdbc_password => "123456"
+            jdbc_driver_library => "/usr/share/logstash/jdbc.jar"
+            jdbc_driver_class => "com.mysql.cj.jdbc.Driver"
+            connection_retry_attempts => "3"
+            jdbc_validate_connection => "true"
+            jdbc_validation_timeout => "3600"
+            jdbc_paging_enabled => "true"
+            jdbc_page_size => "500"
+             # statement为查询数据sql，如果sql较复杂，建议配通过statement_filepath配置sql文件的存放路径；
+             # sql_last_value为内置的变量，存放上次查询结果中最后一条数据tracking_column的值
+             # statement_filepath => "mysql/jdbc.sql"
+            statement => "SELECT * FROM `city` WHERE id> :sql_last_value order by id asc"
+             # 是否将字段名转换为小写，默认true（如果有数据序列化、反序列化需求，建议改为false）；
+            lowercase_column_names => false
+            sql_log_level => warn
+            record_last_run => true
+             # 需要记录查询结果某字段的值时，此字段为true，否则默认tracking_column为timestamp的值；
+            use_column_value => true
+            tracking_column => "id"
+             # Value can be any of: numeric,timestamp，Default value is "numeric"
+            tracking_column_type => numeric
+             # record_last_run上次数据存放位置；
+            last_run_metadata_path => "/usr/share/logstash/last_run_metadata/city"
+             # 是否清除last_run_metadata_path的记录，需要增量同步时此字段必须为false；
+            clean_run => false
+             # 同步频率(分 时 天 月 年)，默认每分钟同步一次；
+            schedule => "* * * * *"
+        }
+        jdbc {
+            type => "province"
+            jdbc_connection_string => "jdbc:mysql://mysql-primary:3306/test?characterEncoding=UTF-8&autoReconnect=true"
+            jdbc_user => "root"
+            jdbc_password => "123456"
+            jdbc_driver_library => "/usr/share/logstash/jdbc.jar"
+            jdbc_driver_class => "com.mysql.cj.jdbc.Driver"
+            connection_retry_attempts => "3"
+            jdbc_validate_connection => "true"
+            jdbc_validation_timeout => "3600"
+            jdbc_paging_enabled => "true"
+            jdbc_page_size => "500"
+             # statement为查询数据sql，如果sql较复杂，建议配通过statement_filepath配置sql文件的存放路径；
+             # sql_last_value为内置的变量，存放上次查询结果中最后一条数据tracking_column的值
+             # statement_filepath => "mysql/jdbc.sql"
+            statement => "SELECT * FROM `province` WHERE id> :sql_last_value order by id asc"
+             # 是否将字段名转换为小写，默认true（如果有数据序列化、反序列化需求，建议改为false）；
+            lowercase_column_names => false
+            sql_log_level => warn
+            record_last_run => true
+             # 需要记录查询结果某字段的值时，此字段为true，否则默认tracking_column为timestamp的值；
+            use_column_value => true
+            tracking_column => "id"
+             # Value can be any of: numeric,timestamp，Default value is "numeric"
+            tracking_column_type => numeric
+             # record_last_run上次数据存放位置；
+            last_run_metadata_path => "/usr/share/logstash/last_run_metadata/province"
+             # 是否清除last_run_metadata_path的记录，需要增量同步时此字段必须为false；
+            clean_run => false
+             # 同步频率(分 时 天 月 年)，默认每分钟同步一次；
+            schedule => "* * * * *"
+        }
+        jdbc {
+            type => "weather_realtime"
+            jdbc_connection_string => "jdbc:mysql://mysql-primary:3306/test?characterEncoding=UTF-8&autoReconnect=true"
+            jdbc_user => "root"
+            jdbc_password => "123456"
+            jdbc_driver_library => "/usr/share/logstash/jdbc.jar"
+            jdbc_driver_class => "com.mysql.cj.jdbc.Driver"
+            connection_retry_attempts => "3"
+            jdbc_validate_connection => "true"
+            jdbc_validation_timeout => "3600"
+            jdbc_paging_enabled => "true"
+            jdbc_page_size => "500"
+             # statement为查询数据sql，如果sql较复杂，建议配通过statement_filepath配置sql文件的存放路径；
+             # sql_last_value为内置的变量，存放上次查询结果中最后一条数据tracking_column的值
+             # statement_filepath => "mysql/jdbc.sql"
+            statement => "SELECT * FROM `weather_realtime` WHERE id> :sql_last_value order by id asc"
+             # 是否将字段名转换为小写，默认true（如果有数据序列化、反序列化需求，建议改为false）；
+            lowercase_column_names => false
+            sql_log_level => warn
+            record_last_run => true
+             # 需要记录查询结果某字段的值时，此字段为true，否则默认tracking_column为timestamp的值；
+            use_column_value => true
+            tracking_column => "id"
+             # Value can be any of: numeric,timestamp，Default value is "numeric"
+            tracking_column_type => numeric
+             # record_last_run上次数据存放位置；
+            last_run_metadata_path => "/usr/share/logstash/last_run_metadata/weather_realtime"
+             # 是否清除last_run_metadata_path的记录，需要增量同步时此字段必须为false；
+            clean_run => false
+             # 同步频率(分 时 天 月 年)，默认每分钟同步一次；
+            schedule => "* * * * *"
+        }
+        jdbc {
+            type => "weather_forecast_day"
+            jdbc_connection_string => "jdbc:mysql://mysql-primary:3306/test?characterEncoding=UTF-8&autoReconnect=true"
+            jdbc_user => "root"
+            jdbc_password => "123456"
+            jdbc_driver_library => "/usr/share/logstash/jdbc.jar"
+            jdbc_driver_class => "com.mysql.cj.jdbc.Driver"
+            connection_retry_attempts => "3"
+            jdbc_validate_connection => "true"
+            jdbc_validation_timeout => "3600"
+            jdbc_paging_enabled => "true"
+            jdbc_page_size => "500"
+             # statement为查询数据sql，如果sql较复杂，建议配通过statement_filepath配置sql文件的存放路径；
+             # sql_last_value为内置的变量，存放上次查询结果中最后一条数据tracking_column的值
+             # statement_filepath => "mysql/jdbc.sql"
+            statement => "SELECT * FROM `weather_forecast_day` WHERE id> :sql_last_value order by id asc"
+             # 是否将字段名转换为小写，默认true（如果有数据序列化、反序列化需求，建议改为false）；
+            lowercase_column_names => false
+            sql_log_level => warn
+            record_last_run => true
+             # 需要记录查询结果某字段的值时，此字段为true，否则默认tracking_column为timestamp的值；
+            use_column_value => true
+            tracking_column => "id"
+             # Value can be any of: numeric,timestamp，Default value is "numeric"
+            tracking_column_type => numeric
+             # record_last_run上次数据存放位置；
+            last_run_metadata_path => "/usr/share/logstash/last_run_metadata/weather_forecast_day"
+             # 是否清除last_run_metadata_path的记录，需要增量同步时此字段必须为false；
+            clean_run => false
+             # 同步频率(分 时 天 月 年)，默认每分钟同步一次；
+            schedule => "* * * * *"
+        }
+    }
+
+    filter {
+        json {
+            source => "message"
+            remove_field => ["message"]
+        }
+    }
+    output {
+        if [type] == "city" {
+            elasticsearch {
+                hosts => ["elasticsearch:9200"]
+                index => "mysql-city"
+                document_id => "%{id}"
+            }
+        }
+        if [type] == "province" {
+            elasticsearch {
+                hosts => ["elasticsearch:9200"]
+                index => "mysql-province"
+                document_id => "%{id}"
+            }
+        }
+        if [type] == "weather_realtime" {
+            elasticsearch {
+                hosts => ["elasticsearch:9200"]
+                index => "mysql-weather_realtime"
+                document_id => "%{id}"
+            }
+        }
+        if [type] == "weather_forecast_day" {
+            elasticsearch {
+                hosts => ["elasticsearch:9200"]
+                index => "mysql-weather_forecast_day"
+                document_id => "%{id}"
+            }
+        }
+        stdout {
+            codec => json_lines
+        }
+    }
+  logstash.yml: |
+    http.host: "0.0.0.0"
+    xpack.monitoring.elasticsearch.hosts: ['http://elasticsearch:9200']
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: logstash
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Ki
+  volumeMode: Filesystem
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: logstash
+  labels:
+    app: logstash
+  annotations:
+    kubesphere.io/creator: admin
+    kubesphere.io/description: 索引同步服务
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: logstash
+  template:
+    metadata:
+      labels:
+        app: logstash
+    spec:
+      initContainers:
+        - name: init-mysql
+          image: /busybox:1.35.0
+          command: ['sh', '-c']
+          args:
+            - echo "Prepare to MySQL initializing...";
+              until nc -w 1 -z mysql 3306;
+              do echo "Waiting for MySQL initialization complete..."; sleep 10; done;
+              echo "MySQL has initialized...";
+        - name: init-elasticsearch
+          image: /busybox:1.35.0
+          command: ['sh', '-c']
+          args:
+            - echo "Prepare to ElasticSearch initializing...";
+              until nc -w 1 -z elasticsearch 9200;
+              do echo "Waiting for ElasticSearch initialization complete..."; sleep 10; done;
+              echo "ElasticSearch has initialized...";
+      containers:
+        - name: logstash
+          image: /logstash:7.16.3
+          command:
+            ["/usr/share/logstash/bin/logstash"]
+          args:
+            ["-f", "/usr/share/logstash/config/logstash.conf"]
+          volumeMounts:
+            - name: logstash-conf
+              readOnly: true
+              mountPath: /usr/share/logstash/config/logstash.conf
+              subPath: logstash.conf
+            - name: logstash-yml
+              readOnly: true
+              mountPath: /usr/share/logstash/config/logstash.yml
+              subPath: logstash.yml
+            - name: last-run-metadata
+              mountPath: /usr/share/logstash/last_run_metadata
+      volumes:
+        - name: logstash-conf
+          configMap:
+            name: logstash
+            items:
+              - key: logstash.conf
+                path: logstash.conf
+            defaultMode: 420
+        - name: logstash-yml
+          configMap:
+            name: logstash
+            items:
+              - key: logstash.yml
+                path: logstash.yml
+            defaultMode: 420
+        - name: last-run-metadata
+          persistentVolumeClaim:
+            claimName: logstash

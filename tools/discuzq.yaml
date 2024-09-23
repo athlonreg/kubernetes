@@ -1,0 +1,93 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name: discuzq
+  labels:
+    app: discuzq
+spec:
+  ports:
+    - name: discuzq
+      protocol: TCP
+      port: 80
+      targetPort: 80
+      nodePort: 30001
+  selector:
+    app: discuzq
+  type: NodePort
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: discuzq-data
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  volumeMode: Filesystem
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: discuzq-mysql
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  volumeMode: Filesystem
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: discuzq
+  labels:
+    app: discuzq
+  annotations:
+    kubesphere.io/creator: admin
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: discuzq
+  template:
+    metadata:
+      labels:
+        app: discuzq
+    spec:
+      volumes:
+        - name: discuzq-data
+          persistentVolumeClaim:
+            claimName: discuzq-data
+        - name: discuzq-mysql
+          persistentVolumeClaim:
+            claimName: discuzq-mysql
+      containers:
+        - name: discuzq
+          image: ccr.ccs.tencentyun.com/discuzq/dzq:latest
+          volumeMounts:
+            - name: discuzq-data
+              mountPath: /var/lib/discuz
+            - name: discuzq-mysql
+              mountPath: /var/lib/mysqldb
+          livenessProbe:
+            tcpSocket:
+              port: 80
+            initialDelaySeconds: 5
+            timeoutSeconds: 10
+            periodSeconds: 300
+            successThreshold: 1
+            failureThreshold: 3
+          readinessProbe:
+            tcpSocket:
+              port: 80
+            initialDelaySeconds: 5
+            timeoutSeconds: 5
+            periodSeconds: 15
+            successThreshold: 1
+            failureThreshold: 3
+          ports:
+            - name: discuzq
+              containerPort: 80

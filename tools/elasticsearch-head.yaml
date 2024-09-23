@@ -1,0 +1,71 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: elasticsearch-head
+  labels:
+    app: elasticsearch-head
+    app.kubernetes.io/name: elasticsearch-head
+  annotations:
+    kubesphere.io/creator: admin
+    kubesphere.io/description: 搜索引擎服务
+spec:
+  type: NodePort
+  ports:
+    - name: elasticsearch-head
+      port: 9100
+      nodePort: 39100
+  selector:
+    app: elasticsearch-head
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: elasticsearch-head
+  annotations:
+    kubesphere.io/creator: admin
+    kubesphere.io/description: 搜索引擎服务
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: elasticsearch-head
+  template:
+    metadata:
+      labels:
+        app: elasticsearch-head
+    spec:
+      initContainers:
+        - name: init-elasticsearch
+          image: /busybox:1.35.0
+          command: ['sh', '-c']
+          args:
+            - echo "Prepare to ElasticSearch initializing...";
+              until nc -w 1 -z elasticsearch 9200;
+              do echo "Waiting for ElasticSearch initialization complete..."; sleep 10; done;
+              echo "ElasticSearch has initialized...";
+      containers:
+        - name: elasticsearch-head
+          image: /elasticsearch-head:5-alpine
+          readinessProbe:
+            tcpSocket:
+              port: 9100
+            initialDelaySeconds: 5
+            timeoutSeconds: 5
+            periodSeconds: 15
+          livenessProbe:
+            tcpSocket:
+              port: 9100
+            initialDelaySeconds: 5
+            timeoutSeconds: 10
+            periodSeconds: 30
+            successThreshold: 1
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 2Gi
+          ports:
+            - containerPort: 9100

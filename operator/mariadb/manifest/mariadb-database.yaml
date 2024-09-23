@@ -1,0 +1,159 @@
+#apiVersion: mariadb.mmontes.io/v1alpha1
+#kind: Database
+#metadata:
+#  name: mariadb
+#spec:
+#  mariaDbRef:
+#    name: mariadb
+#  characterSet: utf8mb4
+#  collate: utf8mb4_unicode_ci
+#---
+#apiVersion: mariadb.mmontes.io/v1alpha1
+#kind: User
+#metadata:
+#  name: mariadb
+#spec:
+#  name: mariadb-metrics
+#  mariaDbRef:
+#    name: mariadb
+#  passwordSecretKeyRef:
+#    name: mariadb
+#    key: password
+#  maxUserConnections: 20
+#---
+#apiVersion: mariadb.mmontes.io/v1alpha1
+#kind: Grant
+#metadata:
+#  name: grant
+#spec:
+#  mariaDbRef:
+#    name: mariadb
+#  privileges:
+#    - "SELECT"
+#    - "INSERT"
+#    - "UPDATE"
+#  database: "*"
+#  table: "*"
+#  username: mariadb-metrics
+#  grantOption: true
+---
+apiVersion: mariadb.mmontes.io/v1alpha1
+kind: MariaDB
+metadata:
+  name: mariadb
+spec:
+  rootPasswordSecretKeyRef:
+    name: mariadb
+    key: root-password
+  database: mariadb
+  username: mariadb
+  passwordSecretKeyRef:
+    name: mariadb
+    key: password
+  connection:
+    secretName: mariadb-conn
+    secretTemplate:
+      key: dsn
+  image:
+    repository: /mariadb
+    tag: "10.11.3"
+    pullPolicy: IfNotPresent
+  port: 3306
+  replicas: 3
+  replication:
+    primary:
+      podIndex: 0
+      automaticFailover: true
+#      service:
+#        type: NodePort
+      connection:
+        secretName: primary-mariadb-conn
+        secretTemplate:
+          key: dsn
+    replica:
+      waitPoint: AfterCommit
+      gtid: CurrentPos
+      connectionTimeout: 10s
+      connectionRetries: 10
+      syncTimeout: 10s
+    syncBinlog: true
+  affinity:
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        - topologyKey: "kubernetes.io/hostname"
+  tolerations:
+    - key: "mariadb.mmontes.io/ha"
+      operator: "Exists"
+      effect: "NoSchedule"
+  podDisruptionBudget:
+    minAvailable: "66%"
+  volumeClaimTemplate:
+    resources:
+      requests:
+        storage: 100Gi
+    accessModes:
+      - ReadWriteOnce
+  volumes:
+    - name: tmp
+      emptyDir: {}
+  volumeMounts:
+    - name: tmp
+      mountPath: /tmp
+  myCnfConfigMapKeyRef:
+    name: mariadb
+    key: config
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+  env:
+    - name: TZ
+      value: Asia/Shanghai
+    - name: UMASK
+      value: "0660"
+    - name: UMASK_DIR
+      value: "0750"
+  podSecurityContext:
+    runAsUser: 0
+  securityContext:
+    allowPrivilegeEscalation: false
+  livenessProbe:
+    exec:
+      command:
+        - bash
+        - -c
+        - mysql -u root -p${MARIADB_ROOT_PASSWORD} -e "SELECT 1;"
+    initialDelaySeconds: 20
+    periodSeconds: 10
+    timeoutSeconds: 5
+  readinessProbe:
+    exec:
+      command:
+        - bash
+        - -c
+        - mysql -u root -p${MARIADB_ROOT_PASSWORD} -e "SELECT 1;"
+    initialDelaySeconds: 20
+    periodSeconds: 10
+    timeoutSeconds: 5
+  metrics:
+    exporter:
+      image:
+        repository: /mysqld-exporter
+        tag: "v0.14.0"
+        pullPolicy: IfNotPresent
+      resources:
+        requests:
+          cpu: 50m
+          memory: 64Mi
+        limits:
+          cpu: 300m
+          memory: 512Mi
+    serviceMonitor:
+      prometheusRelease: prometheus
+      interval: 10s
+      scrapeTimeout: 10s
+#  service:
+#    type: NodePort

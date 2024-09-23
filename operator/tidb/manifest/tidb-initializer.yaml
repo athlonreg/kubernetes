@@ -1,0 +1,51 @@
+#kind: Service
+#apiVersion: v1
+#metadata:
+#  name: mysql
+#  labels:
+#    app.kubernetes.io/component: tidb
+#    app.kubernetes.io/instance: tidb
+#    app.kubernetes.io/managed-by: tidb-operator
+#    app.kubernetes.io/name: tidb-cluster
+#    app.kubernetes.io/used-by: end-user
+#spec:
+#  ports:
+#    - name: mysql-client
+#      protocol: TCP
+#      port: 3306
+#      targetPort: 4000
+#    - name: status
+#      protocol: TCP
+#      port: 10080
+#      targetPort: 10080
+#  selector:
+#    app.kubernetes.io/component: tidb
+#    app.kubernetes.io/instance: tidb
+#    app.kubernetes.io/managed-by: tidb-operator
+#    app.kubernetes.io/name: tidb-cluster
+#---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: tidb
+data:
+  root: Z2VvdmlzQDEyMw==
+type: Opaque
+---
+apiVersion: pingcap.com/v1alpha1
+kind: TidbInitializer
+metadata:
+  name: tidb
+spec:
+  image: /mysql-client:8.0
+  cluster:
+    name: tidb
+  passwordSecret: tidb
+  resources:
+   limits:
+     cpu: 1000m
+     memory: 500Mi
+   requests:
+     cpu: 100m
+     memory: 50Mi
+  timezone: "Asia/Shanghai"

@@ -1,0 +1,61 @@
+apiVersion: minio.min.io/v2
+kind: Tenant
+metadata:
+  name: minio
+  namespace: ismart
+scheduler:
+  name: ''
+spec:
+  certConfig:
+    commonName: '*.minio-hl.ismart.svc.cluster.local'
+    dnsNames:
+      - 'minio-ss-0-{0...2}.minio-hl.ismart.svc.cluster.local'
+    organizationName:
+      - 'system:nodes'
+  configuration:
+    name: minio-env-configuration
+  exposeServices: {}
+  image: '/minio:RELEASE.2023-06-23T20-26-00Z'
+  imagePullPolicy: IfNotPresent
+  imagePullSecret: {}
+  mountPath: /export
+  podManagementPolicy: Parallel
+  pools:
+    - affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: v1.min.io/tenant
+                    operator: In
+                    values:
+                      - minio
+              topologyKey: kubernetes.io/hostname
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - preference:
+                matchExpressions:
+                  - key: minio
+                    operator: In
+                    values:
+                      - 'true'
+              weight: 1
+      name: ss-0
+      resources: {}
+      servers: 3
+      volumeClaimTemplate:
+        apiVersion: v1
+        kind: persistentvolumeclaims
+        metadata: {}
+        spec:
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 50Gi
+        status: {}
+      volumesPerServer: 2
+  requestAutoCert: false
+  serviceAccountName: minio-sa
+  users:
+    - name: minio-user-1

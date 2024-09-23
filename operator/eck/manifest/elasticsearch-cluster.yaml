@@ -1,0 +1,78 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: elasticsearch
+  labels:
+    common.k8s.elastic.co/type: elasticsearch
+    elasticsearch.k8s.elastic.co/cluster-name: elasticsearch
+  annotations:
+    kubesphere.io/creator: admin
+    kubesphere.io/description: 搜索引擎服务
+spec:
+  ports:
+    - port: 9200
+  selector:
+    common.k8s.elastic.co/type: elasticsearch
+    elasticsearch.k8s.elastic.co/cluster-name: elasticsearch
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: elasticsearch-user
+type: kubernetes.io/basic-auth
+stringData:
+  username: root
+  password: 123456
+  roles: superuser
+---
+apiVersion: elasticsearch.k8s.elastic.co/v1
+kind: Elasticsearch
+metadata:
+  name: elasticsearch
+spec:
+  version: 7.17.6
+  image: /elasticsearch:7.17.6
+  volumeClaimDeletePolicy: DeleteOnScaledownOnly
+  auth:
+    fileRealm:
+      - secretName: elasticsearch-user
+  http:
+    tls:
+      selfSignedCertificate:
+        disabled: true
+  nodeSets:
+    - name: default
+      count: 3
+      podTemplate:
+        spec:
+          initContainers:
+            - name: sysctl
+              image: /busybox:1.35.0
+              securityContext:
+                privileged: true
+                runAsUser: 0
+              command: [ 'sh', '-c', 'sysctl -w vm.max_map_count=262144' ]
+          containers:
+            - name: elasticsearch
+              env:
+                - name: ES_JAVA_OPTS
+                  value: "-Xms8g -Xmx8g"
+              resources:
+                limits:
+                  memory: 16Gi
+                  cpu: 4
+                requests:
+                  memory: 16Gi
+                  cpu: 4
+      config:
+        http.cors.enabled: true
+        http.cors.allow-origin: "*"
+      volumeClaimTemplates:
+        - metadata:
+            name: elasticsearch-data
+          spec:
+            accessModes:
+              - ReadWriteOnce
+            resources:
+              requests:
+                storage: 20Gi
